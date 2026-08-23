@@ -33,6 +33,7 @@ export async function startHttpTransport(server: McpServer, port: number): Promi
 export async function createHttpApp(server: McpServer): Promise<Express> {
   const app = express();
   const transport = new StreamableHTTPServerTransport({
+    // Intentional STR-158 POC choice: run stateless until production agent flows prove session state is required.
     sessionIdGenerator: undefined
   });
 

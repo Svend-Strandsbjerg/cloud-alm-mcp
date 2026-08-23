@@ -4,6 +4,11 @@ export interface AuditEvent {
   operationName: CloudAlmOperationName;
   outcome: "allowed" | "rejected" | "failed";
   timestamp: string;
+  actorId?: string;
+  customerContext?: string;
+  resourceType?: string;
+  resourceId?: string;
+  correlationId?: string;
 }
 
 export interface AuditLogger {

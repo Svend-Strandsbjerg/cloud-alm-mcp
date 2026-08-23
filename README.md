@@ -8,11 +8,14 @@ This repository is currently mock-first. It can install, build, test, and start 
 
 - Runtime: Node.js on SAP BTP Cloud Foundry.
 - Production MCP transport: MCP Streamable HTTP via the official MCP TypeScript SDK.
+- STR-158 uses stateless Streamable HTTP for the POC by setting no MCP session ID generator.
 - Local fallback transport: stdio, intended only for local development.
 - Future Cloud ALM access path: SAP BTP Destination Service.
 - Future authentication model: OAuth2 Client Credentials through a configured destination.
 
 Real SAP Cloud ALM connectivity is intentionally not included in STR-158.
+
+Session and state requirements must be revisited before production agent usage if later tool flows require persistent MCP session state. STR-158 intentionally does not introduce a session store.
 
 ## Local Development
 
@@ -65,3 +68,5 @@ The Policy Guard is code-enforced before Cloud ALM client calls. It validates:
 - fail-closed behavior for ambiguous configuration.
 
 This is deliberately not prompt-only enforcement. Customer isolation and durable audit logging are left as future architecture work, with module boundaries already present.
+
+Audit events already reserve optional fields for future traceability: actor, customer context, resource type/id, and correlation ID. The skeleton does not invent real actor or customer values and does not log request payloads, tokens, authorization headers, client IDs, client secrets, or sensitive response bodies.
