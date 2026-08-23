@@ -3,7 +3,34 @@ import { z } from "zod";
 import type { AuditLogger } from "../audit/auditLogger.js";
 import type { CloudAlmClient } from "../cloudAlm/cloudAlmClient.js";
 import type { CloudAlmOperationName } from "../cloudAlm/cloudAlmTypes.js";
+import {
+  CloudAlmOperationNotSupportedError,
+  CloudAlmTaskNotFoundError,
+  CloudAlmValidationError
+} from "../cloudAlm/cloudAlmErrors.js";
 import { CloudAlmPolicyGuard } from "../policy/cloudAlmPolicyGuard.js";
+
+const getTaskInputSchema = z
+  .object({
+    taskId: z.string().min(1)
+  })
+  .strict();
+
+const addCommentInputSchema = z
+  .object({
+    taskId: z.string().min(1),
+    text: z.string().min(1)
+  })
+  .strict();
+
+const updateTaskInputSchema = z
+  .object({
+    taskId: z.string().min(1),
+    title: z.string().min(1).optional(),
+    status: z.string().min(1).optional(),
+    priority: z.string().min(1).optional()
+  })
+  .strict();
 
 export interface CloudAlmMcpServerOptions {
   client: CloudAlmClient;
@@ -22,11 +49,10 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
     {
       title: "Get Cloud ALM task",
       description: "Return one Cloud ALM task from the configured server-side scope.",
-      inputSchema: {
-        taskId: z.string().min(1)
-      }
+      inputSchema: getTaskInputSchema
     },
-    async (input) => {
+    (input) =>
+      toMcpToolResult(async () => {
       const task = await executeAuditedClientCall({
         operationName: "alm_get_task",
         input,
@@ -37,7 +63,7 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
         call: () => options.client.getTask(input.taskId)
       });
       return textResult(task);
-    }
+      })
   );
 
   server.registerTool(
@@ -45,11 +71,10 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
     {
       title: "Get Cloud ALM task comments",
       description: "Return comments for one Cloud ALM task from the configured server-side scope.",
-      inputSchema: {
-        taskId: z.string().min(1)
-      }
+      inputSchema: getTaskInputSchema
     },
-    async (input) => {
+    (input) =>
+      toMcpToolResult(async () => {
       const comments = await executeAuditedClientCall({
         operationName: "alm_get_comments",
         input,
@@ -60,7 +85,7 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
         call: () => options.client.getComments(input.taskId)
       });
       return textResult(comments);
-    }
+      })
   );
 
   server.registerTool(
@@ -68,12 +93,10 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
     {
       title: "Add Cloud ALM task comment",
       description: "Add a comment to one Cloud ALM task in the configured server-side scope.",
-      inputSchema: {
-        taskId: z.string().min(1),
-        text: z.string().min(1)
-      }
+      inputSchema: addCommentInputSchema
     },
-    async (input) => {
+    (input) =>
+      toMcpToolResult(async () => {
       const comment = await executeAuditedClientCall({
         operationName: "alm_add_comment",
         input,
@@ -84,7 +107,7 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
         call: () => options.client.addComment(input)
       });
       return textResult(comment);
-    }
+      })
   );
 
   server.registerTool(
@@ -92,14 +115,10 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
     {
       title: "Update Cloud ALM task",
       description: "Update basic fields on one Cloud ALM task in the configured server-side scope.",
-      inputSchema: {
-        taskId: z.string().min(1),
-        title: z.string().min(1).optional(),
-        status: z.string().min(1).optional(),
-        priority: z.string().min(1).optional()
-      }
+      inputSchema: updateTaskInputSchema
     },
-    async (input) => {
+    (input) =>
+      toMcpToolResult(async () => {
       const task = await executeAuditedClientCall({
         operationName: "alm_update_task",
         input,
@@ -110,7 +129,7 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
         call: () => options.client.updateTask(input)
       });
       return textResult(task);
-    }
+      })
   );
 
   return server;
@@ -147,12 +166,77 @@ export async function executeAuditedClientCall<T>(options: AuditedClientCallOpti
   }
 }
 
-function textResult(payload: unknown) {
+async function toMcpToolResult(createResult: () => Promise<McpTextResult>): Promise<McpTextResult> {
+  try {
+    return await createResult();
+  } catch (error) {
+    return errorResult(formatSafeToolError(error));
+  }
+}
+
+export interface SafeToolError {
+  code: string;
+  message: string;
+}
+
+export function formatSafeToolError(error: unknown): SafeToolError {
+  if (error instanceof CloudAlmTaskNotFoundError) {
+    return { code: "TASK_NOT_FOUND", message: error.message };
+  }
+
+  if (error instanceof CloudAlmValidationError) {
+    return { code: "VALIDATION_ERROR", message: error.message };
+  }
+
+  if (error instanceof CloudAlmOperationNotSupportedError) {
+    return { code: "OPERATION_NOT_SUPPORTED", message: error.message };
+  }
+
+  if (error instanceof Error && isPolicyErrorMessage(error.message)) {
+    return { code: "POLICY_DENIED", message: error.message };
+  }
+
+  return { code: "INTERNAL_ERROR", message: "Cloud ALM tool execution failed." };
+}
+
+function isPolicyErrorMessage(message: string): boolean {
+  return (
+    message.includes("capability is disabled") ||
+    message.includes("Operation is not allowed") ||
+    message.includes("Unknown Cloud ALM operation") ||
+    message.includes("Agent-supplied scope is not allowed") ||
+    message.includes("Destination runtime requires") ||
+    message.includes("Exactly one server-side destination")
+  );
+}
+
+export interface McpTextResult {
+  [key: string]: unknown;
+  content: Array<{
+    type: "text";
+    text: string;
+  }>;
+  isError?: boolean;
+}
+
+function textResult(payload: unknown): McpTextResult {
   return {
     content: [
       {
         type: "text" as const,
         text: JSON.stringify(payload, null, 2)
+      }
+    ]
+  };
+}
+
+function errorResult(error: SafeToolError): McpTextResult {
+  return {
+    isError: true,
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({ error }, null, 2)
       }
     ]
   };
