@@ -11,7 +11,6 @@ applications:
     health-check-http-endpoint: /health
     env:
       NODE_ENV: production
-      NPM_CONFIG_PRODUCTION: false
       RUNTIME_MODE: mock
       MCP_TRANSPORT: http
       EXTERNAL_CALLS_ENABLED: false

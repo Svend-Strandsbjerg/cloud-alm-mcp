@@ -55,9 +55,11 @@ WRITE_CAPABILITY_ENABLED=false
 
 No Cloud ALM credentials, OAuth settings, XSUAA/IAS binding, Destination Service binding, or real destination values are required for STR-162.
 
-Cloud Foundry staging runs `npm install`; the package `postinstall` lifecycle runs `npm run build` so `dist/src/index.js` exists before `npm start`. The manifest sets `NPM_CONFIG_PRODUCTION=false` so TypeScript and type packages from `devDependencies` are available during staging even though the runtime `NODE_ENV` is `production`.
+Cloud Foundry staging runs `npm install`; the package `postinstall` lifecycle runs `npm run build` so `dist/src/index.js` exists before `npm start`. TypeScript and the type packages needed for compilation are regular dependencies so the standard Node.js buildpack production install can build the app without carrying local-only tools such as `vitest` and `tsx`.
 
-The app keeps using the platform-provided `PORT`; do not hardcode a production port. `package.json` requests Node.js `22.x || 24.x`, matching currently supported SAP BTP Cloud Foundry Node.js buildpack majors. Operators should still verify the exact target foundation with `cf buildpacks` before deployment.
+The app keeps using the platform-provided `PORT`; do not hardcode a production port. `package.json` requests Node.js `22.x` for deterministic staging/runtime behavior on the first deployment. SAP BTP Cloud Foundry currently supports Node.js 22 through `nodejs_buildpack`; operators should still verify the exact target foundation with `cf buildpacks` before deployment.
+
+`package-lock.json` remains the authoritative npm dependency lock. No `packageManager` field is set because Cloud Foundry uses npm for a root `package.json`/`package-lock.json`, and forcing an npm version is only needed if the target foundation's default npm proves incompatible.
 
 Local validation:
 

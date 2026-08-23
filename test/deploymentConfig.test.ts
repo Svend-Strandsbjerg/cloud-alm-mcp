@@ -4,8 +4,14 @@ import { describe, expect, it } from "vitest";
 const manifest = readFileSync(new URL("../manifest.yml", import.meta.url), "utf8");
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   main: string;
+  dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
   scripts: Record<string, string>;
   engines: Record<string, string>;
+  packageManager?: string;
+};
+const tsconfig = JSON.parse(readFileSync(new URL("../tsconfig.json", import.meta.url), "utf8")) as {
+  include: string[];
 };
 
 describe("Cloud Foundry deployment configuration", () => {
@@ -15,6 +21,8 @@ describe("Cloud Foundry deployment configuration", () => {
     expect(manifest).toContain("EXTERNAL_CALLS_ENABLED: false");
     expect(manifest).toContain("READ_CAPABILITY_ENABLED: true");
     expect(manifest).toContain("WRITE_CAPABILITY_ENABLED: false");
+    expect(manifest).toContain("NODE_ENV: production");
+    expect(manifest).not.toContain("NPM_CONFIG_PRODUCTION");
     expect(manifest).not.toContain("RUNTIME_MODE: destination");
   });
 
@@ -34,6 +42,13 @@ describe("Cloud Foundry deployment configuration", () => {
     expect(packageJson.scripts.build).toBe("tsc -p tsconfig.json");
     expect(packageJson.scripts.postinstall).toBe("npm run build");
     expect(packageJson.scripts.start).toBe("node dist/src/index.js");
-    expect(packageJson.engines.node).toBe("22.x || 24.x");
+    expect(packageJson.engines.node).toBe("22.x");
+    expect(packageJson.dependencies.typescript).toBeDefined();
+    expect(packageJson.dependencies["@types/node"]).toBeDefined();
+    expect(packageJson.dependencies["@types/express"]).toBeDefined();
+    expect(packageJson.devDependencies.vitest).toBeDefined();
+    expect(packageJson.devDependencies.tsx).toBeDefined();
+    expect(packageJson.packageManager).toBeUndefined();
+    expect(tsconfig.include).toEqual(["src/**/*.ts"]);
   });
 });
