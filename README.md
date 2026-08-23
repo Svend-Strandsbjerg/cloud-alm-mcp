@@ -31,6 +31,8 @@ By default, `npm start` runs mock mode over HTTP and exposes:
 - MCP endpoint: `POST /mcp`
 - Health endpoint: `GET /health`
 
+The remote MCP endpoint is stateless and POST-only. `GET`, `DELETE`, and other unsupported methods on `/mcp` return `405 Method Not Allowed` with `Allow: POST`; GET SSE and MCP session termination are intentionally not implemented. JSON request bodies are limited to `64kb`.
+
 Example:
 
 ```bash

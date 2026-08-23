@@ -39,4 +39,9 @@ describe("loadRuntimeConfig", () => {
   it("rejects ambiguous booleans", () => {
     expect(() => loadRuntimeConfig({ WRITE_CAPABILITY_ENABLED: "yes" })).toThrow(/true or false/);
   });
+
+  it("rejects invalid ports", () => {
+    expect(() => loadRuntimeConfig({ PORT: "0" })).toThrow(/PORT/);
+    expect(() => loadRuntimeConfig({ PORT: "not-a-port" })).toThrow(/PORT/);
+  });
 });
