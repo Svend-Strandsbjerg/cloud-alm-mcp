@@ -7,8 +7,13 @@ applications:
     buildpacks:
       - nodejs_buildpack
     command: npm start
+    health-check-type: http
+    health-check-http-endpoint: /health
     env:
       NODE_ENV: production
-      RUNTIME_MODE: destination
+      NPM_CONFIG_PRODUCTION: false
+      RUNTIME_MODE: mock
       MCP_TRANSPORT: http
       EXTERNAL_CALLS_ENABLED: false
+      READ_CAPABILITY_ENABLED: true
+      WRITE_CAPABILITY_ENABLED: false
