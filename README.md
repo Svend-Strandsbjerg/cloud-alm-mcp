@@ -55,6 +55,12 @@ Local defaults are intentionally safe: mock runtime, HTTP transport, read enable
 
 Destination mode exists only as a placeholder in this skeleton. It fails closed until the BTP Destination Service lookup and OAuth token flow are implemented in later tasks.
 
+## Mock Task Client
+
+Mock mode uses deterministic in-memory task and comment data for local development and tests. It supports only the current mock contract fields: task `id`, `title`, `status`, `priority`, and comment `id`, `taskId`, `author`, `text`, `createdAt`.
+
+The mock client returns known tasks, rejects unknown task IDs, appends one comment at a time with deterministic IDs, and updates only explicitly allowlisted mock task fields. These fields are not claimed to be official SAP `CALM_TKM` payload fields. Real Cloud ALM endpoints, payload schemas, scopes, pagination names, and update semantics remain unverified and deferred to the real integration work.
+
 ## Security Boundary
 
 The Policy Guard is code-enforced before Cloud ALM client calls. It validates:
