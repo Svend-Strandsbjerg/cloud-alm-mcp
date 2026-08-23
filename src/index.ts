@@ -11,12 +11,13 @@ import { CloudAlmPolicyGuard } from "./policy/cloudAlmPolicyGuard.js";
 
 export async function main(): Promise<void> {
   const config = loadRuntimeConfig();
-  const createServer = () => {
-    const client = createClient(config.runtimeMode);
-    const policyGuard = new CloudAlmPolicyGuard(config);
-    const auditLogger = new ConsoleAuditLogger();
-    return createCloudAlmMcpServer({ client, policyGuard, auditLogger });
-  };
+  const appDependencies = createApplicationDependencies(config.runtimeMode);
+  const createServer = () =>
+    createCloudAlmMcpServer({
+      client: appDependencies.client,
+      policyGuard: new CloudAlmPolicyGuard(config),
+      auditLogger: appDependencies.auditLogger
+    });
 
   if (config.mcpTransport === "stdio") {
     await startStdioTransport(createServer());
@@ -25,6 +26,18 @@ export async function main(): Promise<void> {
 
   const handle = await startHttpTransport(createServer, config.port);
   installGracefulShutdown(handle);
+}
+
+interface ApplicationDependencies {
+  client: CloudAlmClient;
+  auditLogger: ConsoleAuditLogger;
+}
+
+function createApplicationDependencies(runtimeMode: "mock" | "destination"): ApplicationDependencies {
+  return {
+    client: createClient(runtimeMode),
+    auditLogger: new ConsoleAuditLogger()
+  };
 }
 
 function createClient(runtimeMode: "mock" | "destination"): CloudAlmClient {

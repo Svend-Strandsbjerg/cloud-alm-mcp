@@ -121,18 +121,39 @@ describe("HTTP MCP transport", () => {
     expect(response.headers.get("x-request-id")).toBe("test-request-id");
   });
 
-  it("handles concurrent MCP POST tool calls with isolated per-request mock state", async () => {
+  it("persists mock business state across separate HTTP MCP requests", async () => {
     const { baseUrl } = await startTestHttpServer();
 
-    const [first, second] = await Promise.all([callAddComment(baseUrl), callAddComment(baseUrl)]);
+    const created = await callAddComment(baseUrl, "Persist this comment.");
+    const client = await createHttpMcpClient(baseUrl);
+    const comments = await client.callTool({ name: "alm_get_comments", arguments: { taskId: "TASK-1002" } });
 
-    expect(first).toMatchObject({ id: "COMMENT-1002", taskId: "TASK-1002" });
-    expect(second).toMatchObject({ id: "COMMENT-1002", taskId: "TASK-1002" });
+    expect(created).toMatchObject({ id: "COMMENT-1002", taskId: "TASK-1002", text: "Persist this comment." });
+    expect(parseTextResult(comments)).toEqual([created]);
+  });
+
+  it("handles concurrent MCP POST tool calls without transport/session leakage", async () => {
+    const { baseUrl } = await startTestHttpServer();
+
+    const [first, second] = await Promise.all([
+      callAddComment(baseUrl, "Concurrent mock comment A."),
+      callAddComment(baseUrl, "Concurrent mock comment B.")
+    ]);
+
+    expect([first, second]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ taskId: "TASK-1002", text: "Concurrent mock comment A." }),
+        expect.objectContaining({ taskId: "TASK-1002", text: "Concurrent mock comment B." })
+      ])
+    );
+    expect(new Set([getCommentId(first), getCommentId(second)]).size).toBe(2);
   });
 });
 
 async function startTestHttpServer(): Promise<{ app: Express; baseUrl: string }> {
-  const app = createHttpApp(createTestMcpServer);
+  const sharedMockClient = new MockCloudAlmClient();
+  const sharedAuditLogger = new MemoryAuditLogger();
+  const app = createHttpApp(() => createTestMcpServer(sharedMockClient, sharedAuditLogger));
   const server = http.createServer(app);
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -142,11 +163,11 @@ async function startTestHttpServer(): Promise<{ app: Express; baseUrl: string }>
   return { app, baseUrl: `http://127.0.0.1:${address.port}` };
 }
 
-function createTestMcpServer() {
+function createTestMcpServer(client = new MockCloudAlmClient(), auditLogger = new MemoryAuditLogger()) {
   return createCloudAlmMcpServer({
-    client: new MockCloudAlmClient(),
+    client,
     policyGuard: new CloudAlmPolicyGuard(config),
-    auditLogger: new MemoryAuditLogger()
+    auditLogger
   });
 }
 
@@ -160,14 +181,22 @@ async function createHttpMcpClient(baseUrl: string): Promise<Client> {
   return client;
 }
 
-async function callAddComment(baseUrl: string): Promise<unknown> {
+async function callAddComment(baseUrl: string, text: string): Promise<unknown> {
   const client = await createHttpMcpClient(baseUrl);
   const result = await client.callTool({
     name: "alm_add_comment",
-    arguments: { taskId: "TASK-1002", text: "Concurrent mock comment." }
+    arguments: { taskId: "TASK-1002", text }
   });
 
   return parseTextResult(result);
+}
+
+function getCommentId(comment: unknown): string {
+  if (typeof comment !== "object" || comment === null || !("id" in comment) || typeof comment.id !== "string") {
+    throw new Error("Expected comment with string id.");
+  }
+
+  return comment.id;
 }
 
 function parseTextResult(result: unknown): unknown {
