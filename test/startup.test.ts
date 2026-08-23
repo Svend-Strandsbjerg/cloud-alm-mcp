@@ -17,15 +17,15 @@ describe("startup skeleton", () => {
     });
   });
 
-  it("creates the HTTP app without Cloud ALM credentials", async () => {
+  it("creates the HTTP app without Cloud ALM credentials", () => {
     const config = loadRuntimeConfig({});
-    const server = createCloudAlmMcpServer({
+    const createServer = () => createCloudAlmMcpServer({
       client: new MockCloudAlmClient(),
       policyGuard: new CloudAlmPolicyGuard(config),
       auditLogger: new ConsoleAuditLogger()
     });
 
-    const app = await createHttpApp(server);
+    const app = createHttpApp(createServer);
     expect(app).toBeDefined();
   });
 });
