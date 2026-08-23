@@ -73,4 +73,34 @@ describe("executeAuditedClientCall", () => {
       })
     ]);
   });
+
+  it("records rejected audit events and does not call the client when policy denies", async () => {
+    const auditLogger = new MemoryAuditLogger();
+    let clientCalled = false;
+
+    await expect(
+      executeAuditedClientCall({
+        operationName: "alm_add_comment",
+        input: { taskId: "TASK-1", text: "blocked" },
+        resourceType: "task",
+        resourceId: "TASK-1",
+        policyGuard: new CloudAlmPolicyGuard({ ...config, writeCapabilityEnabled: false }),
+        auditLogger,
+        call: async () => {
+          clientCalled = true;
+          return { id: "COMMENT-1" };
+        }
+      })
+    ).rejects.toThrow(/Write capability is disabled/);
+
+    expect(clientCalled).toBe(false);
+    expect(auditLogger.events).toEqual([
+      expect.objectContaining({
+        operationName: "alm_add_comment",
+        outcome: "rejected",
+        resourceType: "task",
+        resourceId: "TASK-1"
+      })
+    ]);
+  });
 });

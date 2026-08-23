@@ -146,17 +146,24 @@ export interface AuditedClientCallOptions<T> {
 }
 
 export async function executeAuditedClientCall<T>(options: AuditedClientCallOptions<T>): Promise<T> {
-  const operationName = options.policyGuard.assertAllowed({
-    operationName: options.operationName,
-    input: options.input
-  });
   const auditContext = {
-    operationName,
+    operationName: options.operationName,
     resourceType: options.resourceType,
     resourceId: options.resourceId
   };
+  let operationName: CloudAlmOperationName;
 
-  options.auditLogger.record({ ...auditContext, outcome: "allowed", timestamp: new Date().toISOString() });
+  try {
+    operationName = options.policyGuard.assertAllowed({
+      operationName: options.operationName,
+      input: options.input
+    });
+  } catch (error) {
+    options.auditLogger.record({ ...auditContext, outcome: "rejected", timestamp: new Date().toISOString() });
+    throw error;
+  }
+
+  options.auditLogger.record({ ...auditContext, operationName, outcome: "allowed", timestamp: new Date().toISOString() });
 
   try {
     return await options.call();

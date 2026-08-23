@@ -133,7 +133,11 @@ describe("Cloud ALM MCP tools", () => {
   });
 
   it("rejects alm_add_comment when write capability is disabled", async () => {
-    const { mcpClient } = await createMcpTestClient({ config: { ...baseConfig, writeCapabilityEnabled: false } });
+    const countingClient = new CountingCloudAlmClient();
+    const { mcpClient, auditLogger } = await createMcpTestClient({
+      config: { ...baseConfig, writeCapabilityEnabled: false },
+      cloudAlmClient: countingClient
+    });
 
     const result = await mcpClient.callTool({
       name: "alm_add_comment",
@@ -147,6 +151,10 @@ describe("Cloud ALM MCP tools", () => {
         message: "Write capability is disabled."
       }
     });
+    expect(auditLogger.events).toEqual([
+      expect.objectContaining({ operationName: "alm_add_comment", outcome: "rejected", resourceId: "TASK-1001" })
+    ]);
+    expect(countingClient.callCount).toBe(0);
   });
 
   it("rejects empty comment text cleanly", async () => {
@@ -175,7 +183,11 @@ describe("Cloud ALM MCP tools", () => {
   });
 
   it("rejects alm_update_task when write capability is disabled", async () => {
-    const { mcpClient } = await createMcpTestClient({ config: { ...baseConfig, writeCapabilityEnabled: false } });
+    const countingClient = new CountingCloudAlmClient();
+    const { mcpClient, auditLogger } = await createMcpTestClient({
+      config: { ...baseConfig, writeCapabilityEnabled: false },
+      cloudAlmClient: countingClient
+    });
 
     const result = await mcpClient.callTool({
       name: "alm_update_task",
@@ -189,6 +201,10 @@ describe("Cloud ALM MCP tools", () => {
         message: "Write capability is disabled."
       }
     });
+    expect(auditLogger.events).toEqual([
+      expect.objectContaining({ operationName: "alm_update_task", outcome: "rejected", resourceId: "TASK-1001" })
+    ]);
+    expect(countingClient.callCount).toBe(0);
   });
 
   it("rejects empty and no-op updates cleanly", async () => {
@@ -298,6 +314,16 @@ class CountingCloudAlmClient extends MockCloudAlmClient {
   override async getTask(taskId: string) {
     this.callCount += 1;
     return super.getTask(taskId);
+  }
+
+  override async addComment(input: Parameters<MockCloudAlmClient["addComment"]>[0]) {
+    this.callCount += 1;
+    return super.addComment(input);
+  }
+
+  override async updateTask(input: Parameters<MockCloudAlmClient["updateTask"]>[0]) {
+    this.callCount += 1;
+    return super.updateTask(input);
   }
 }
 
