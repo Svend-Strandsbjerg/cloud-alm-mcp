@@ -41,6 +41,59 @@ curl http://localhost:3000/health
 
 Use `.env.example` as the list of supported placeholders. Do not add real Cloud ALM secrets to local files committed to git.
 
+## SAP BTP Cloud Foundry POC Deployment
+
+`manifest.yml` defines a single `cloud-alm-mcp` Cloud Foundry application using `nodejs_buildpack`, `command: npm start`, and an HTTP health check on `/health`. The first deployment is intentionally locked to safe mock mode:
+
+```text
+RUNTIME_MODE=mock
+MCP_TRANSPORT=http
+EXTERNAL_CALLS_ENABLED=false
+READ_CAPABILITY_ENABLED=true
+WRITE_CAPABILITY_ENABLED=false
+```
+
+No Cloud ALM credentials, OAuth settings, XSUAA/IAS binding, Destination Service binding, or real destination values are required for STR-162.
+
+Cloud Foundry staging runs `npm install`; the package `postinstall` lifecycle runs `npm run build` so `dist/src/index.js` exists before `npm start`. TypeScript and the type packages needed for compilation are regular dependencies so the standard Node.js buildpack production install can build the app without carrying local-only tools such as `vitest` and `tsx`.
+
+The app keeps using the platform-provided `PORT`; do not hardcode a production port. `package.json` requests Node.js `22.x` for deterministic staging/runtime behavior on the first deployment. SAP BTP Cloud Foundry currently supports Node.js 22 through `nodejs_buildpack`; operators should still verify the exact target foundation with `cf buildpacks` before deployment.
+
+`package-lock.json` remains the authoritative npm dependency lock. No `packageManager` field is set because Cloud Foundry uses npm for a root `package.json`/`package-lock.json`, and forcing an npm version is only needed if the target foundation's default npm proves incompatible.
+
+Local validation:
+
+```bash
+npm install
+npm run build
+npm test
+npm start
+curl http://localhost:3000/health
+```
+
+BTP values needed from the operator:
+
+```text
+CF API endpoint
+BTP org
+BTP space
+route/domain decision, if not using the default route
+```
+
+Manual BTP validation flow:
+
+```bash
+cf login -a <api-endpoint>
+cf target -o <org> -s <space>
+cf buildpacks
+cf push
+cf app cloud-alm-mcp
+cf logs cloud-alm-mcp --recent
+curl https://<route>/health
+```
+
+After deployment, validate that `/health` returns `status: ok`, `POST /mcp` works in mock mode, `GET /mcp` returns `405 Method Not Allowed` with `Allow: POST`, and logs contain request IDs, method, path, status, and duration without request bodies, authorization headers, tokens, or secrets.
+
 ## Configuration
 
 Core environment variables:
