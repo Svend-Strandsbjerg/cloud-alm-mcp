@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { AuditLogger } from "../audit/auditLogger.js";
 import type { CloudAlmClient } from "../cloudAlm/cloudAlmClient.js";
+import type { CloudAlmOperationName } from "../cloudAlm/cloudAlmTypes.js";
 import { CloudAlmPolicyGuard } from "../policy/cloudAlmPolicyGuard.js";
 
 export interface CloudAlmMcpServerOptions {
@@ -26,9 +27,15 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
       }
     },
     async (input) => {
-      const operationName = options.policyGuard.assertAllowed({ operationName: "alm_get_task", input });
-      options.auditLogger.record({ operationName, outcome: "allowed", timestamp: new Date().toISOString() });
-      const task = await options.client.getTask(input.taskId);
+      const task = await executeAuditedClientCall({
+        operationName: "alm_get_task",
+        input,
+        resourceType: "task",
+        resourceId: input.taskId,
+        policyGuard: options.policyGuard,
+        auditLogger: options.auditLogger,
+        call: () => options.client.getTask(input.taskId)
+      });
       return textResult(task);
     }
   );
@@ -43,9 +50,15 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
       }
     },
     async (input) => {
-      const operationName = options.policyGuard.assertAllowed({ operationName: "alm_get_comments", input });
-      options.auditLogger.record({ operationName, outcome: "allowed", timestamp: new Date().toISOString() });
-      const comments = await options.client.getComments(input.taskId);
+      const comments = await executeAuditedClientCall({
+        operationName: "alm_get_comments",
+        input,
+        resourceType: "task",
+        resourceId: input.taskId,
+        policyGuard: options.policyGuard,
+        auditLogger: options.auditLogger,
+        call: () => options.client.getComments(input.taskId)
+      });
       return textResult(comments);
     }
   );
@@ -61,9 +74,15 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
       }
     },
     async (input) => {
-      const operationName = options.policyGuard.assertAllowed({ operationName: "alm_add_comment", input });
-      options.auditLogger.record({ operationName, outcome: "allowed", timestamp: new Date().toISOString() });
-      const comment = await options.client.addComment(input);
+      const comment = await executeAuditedClientCall({
+        operationName: "alm_add_comment",
+        input,
+        resourceType: "task",
+        resourceId: input.taskId,
+        policyGuard: options.policyGuard,
+        auditLogger: options.auditLogger,
+        call: () => options.client.addComment(input)
+      });
       return textResult(comment);
     }
   );
@@ -81,14 +100,51 @@ export function createCloudAlmMcpServer(options: CloudAlmMcpServerOptions): McpS
       }
     },
     async (input) => {
-      const operationName = options.policyGuard.assertAllowed({ operationName: "alm_update_task", input });
-      options.auditLogger.record({ operationName, outcome: "allowed", timestamp: new Date().toISOString() });
-      const task = await options.client.updateTask(input);
+      const task = await executeAuditedClientCall({
+        operationName: "alm_update_task",
+        input,
+        resourceType: "task",
+        resourceId: input.taskId,
+        policyGuard: options.policyGuard,
+        auditLogger: options.auditLogger,
+        call: () => options.client.updateTask(input)
+      });
       return textResult(task);
     }
   );
 
   return server;
+}
+
+export interface AuditedClientCallOptions<T> {
+  operationName: CloudAlmOperationName;
+  input: Record<string, unknown>;
+  resourceType?: string;
+  resourceId?: string;
+  policyGuard: CloudAlmPolicyGuard;
+  auditLogger: AuditLogger;
+  call(): Promise<T>;
+}
+
+export async function executeAuditedClientCall<T>(options: AuditedClientCallOptions<T>): Promise<T> {
+  const operationName = options.policyGuard.assertAllowed({
+    operationName: options.operationName,
+    input: options.input
+  });
+  const auditContext = {
+    operationName,
+    resourceType: options.resourceType,
+    resourceId: options.resourceId
+  };
+
+  options.auditLogger.record({ ...auditContext, outcome: "allowed", timestamp: new Date().toISOString() });
+
+  try {
+    return await options.call();
+  } catch (error) {
+    options.auditLogger.record({ ...auditContext, outcome: "failed", timestamp: new Date().toISOString() });
+    throw error;
+  }
 }
 
 function textResult(payload: unknown) {
